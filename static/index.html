@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GPU Usage Dashboard</title>
+    <script>
+      (function () {
+        var storageKey = "gpu-dashboard-theme";
+        var theme = "dark";
+
+        try {
+          var storedTheme = localStorage.getItem(storageKey);
+          if (storedTheme === "dark" || storedTheme === "light") {
+            theme = storedTheme;
+          }
+        } catch (error) {
+          theme = "dark";
+        }
+
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%23030917%27/%3E%3Cpath d=%27M15 40V24h17v5H21v6h9v5H15Zm23 0V24h11c5 0 8 3 8 8s-3 8-8 8H38Zm6-5h5c2 0 3-1 3-3s-1-3-3-3h-5v6Z%27 fill=%27%2324d7e8%27/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to dashboard</a>
+    <div class="app-frame">
+      <aside class="side-nav" aria-label="Dashboard navigation">
+        <a class="nav-brand" href="#overview" aria-label="GPU dashboard overview">
+          <span class="nav-brand-mark" aria-hidden="true">GPU</span>
+          <span>
+            <strong>GPU Monitor</strong>
+            <small>Local telemetry</small>
+          </span>
+        </a>
+
+        <nav class="view-nav" aria-label="Dashboard views" role="tablist">
+          <a class="nav-link" href="#overview" data-route="overview" role="tab" aria-controls="overview-view">
+            <span class="nav-icon" aria-hidden="true"></span>
+            Overview
+          </a>
+          <span class="nav-section-label">GPUs</span>
+          <div class="gpu-nav-list" id="gpu-nav-list" aria-live="polite">
+            <span class="nav-empty">Awaiting GPUs</span>
+          </div>
+          <a class="nav-link" href="#diagnostics" data-route="diagnostics" role="tab" aria-controls="diagnostics-view">
+            <span class="nav-icon" aria-hidden="true"></span>
+            Diagnostics
+          </a>
+        </nav>
+      </aside>
+
+      <main class="dashboard-shell" id="main-content" tabindex="-1">
+        <header class="topbar" aria-labelledby="dashboard-title">
+          <div>
+            <p class="eyebrow">Local NVIDIA Telemetry</p>
+            <h1 id="dashboard-title">GPU Usage Dashboard</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle color theme">
+              <span class="theme-toggle-track" aria-hidden="true">
+                <span class="theme-toggle-thumb"></span>
+              </span>
+              <span id="theme-toggle-label">Dark Mode</span>
+            </button>
+            <div class="status-chip" id="overall-status" aria-live="polite">
+              Loading
+            </div>
+          </div>
+        </header>
+
+        <section class="state-panel" id="state-panel" aria-live="polite">
+          <p id="state-message">Awaiting GPU telemetry.</p>
+        </section>
+
+        <section class="view-section overview-command" id="overview-view" data-view="overview" role="tabpanel">
+          <section class="overview-hero" aria-label="GPU fleet overview">
+            <div class="hero-copy">
+              <span class="metric-label">Command Center</span>
+              <h2>All GPU Systems</h2>
+              <p>
+                Live telemetry across the local NVIDIA fleet, tuned for fast health checks and clear GPU separation.
+              </p>
+            </div>
+            <div class="hero-orbit" aria-hidden="true">
+              <span class="orbit-core" id="overview-hero-core">--</span>
+              <span class="orbit-ring orbit-ring-a"></span>
+              <span class="orbit-ring orbit-ring-b"></span>
+            </div>
+          </section>
+
+          <section class="command-kpi-grid" aria-label="Overview key metrics">
+            <article class="command-kpi" data-kpi="gpus">
+              <span class="metric-label">Total GPUs</span>
+              <strong id="overview-kpi-gpus">--</strong>
+              <small id="overview-kpi-gpus-detail">Awaiting telemetry</small>
+            </article>
+            <article class="command-kpi" data-kpi="health">
+              <span class="metric-label">Fleet Health</span>
+              <strong id="overview-kpi-health">Loading</strong>
+              <small id="overview-kpi-health-detail">Collector starting</small>
+            </article>
+            <article class="command-kpi" data-kpi="utilization">
+              <span class="metric-label">Utilization</span>
+              <strong id="overview-kpi-utilization">--</strong>
+              <small id="overview-kpi-utilization-detail">Avg / peak</small>
+            </article>
+            <article class="command-kpi" data-kpi="memory">
+              <span class="metric-label">Memory Load</span>
+              <strong id="overview-kpi-memory">--</strong>
+              <small id="overview-kpi-memory-detail">Used / capacity</small>
+            </article>
+            <article class="command-kpi" data-kpi="temperature">
+              <span class="metric-label">Hottest GPU</span>
+              <strong id="overview-kpi-temperature">--</strong>
+              <small id="overview-kpi-temperature-detail">Thermal peak</small>
+            </article>
+            <article class="command-kpi" data-kpi="power">
+              <span class="metric-label">Power Draw</span>
+              <strong id="overview-kpi-power">--</strong>
+              <small id="overview-kpi-power-detail">Total draw</small>
+            </article>
+          </section>
+
+          <section class="command-grid" aria-label="Overview analytics">
+            <article class="command-panel trend-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Waveform</span>
+                  <h2>Utilization By GPU</h2>
+                </div>
+                <span class="panel-chip">60s</span>
+              </div>
+              <svg
+                class="overview-chart overview-trend-chart"
+                id="overview-utilization-chart"
+                viewBox="0 0 620 220"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label="GPU utilization trend chart"
+                aria-describedby="overview-utilization-tooltip"
+                tabindex="0"
+              ></svg>
+              <div class="chart-tooltip" id="overview-utilization-tooltip" role="tooltip" hidden></div>
+              <div class="chart-legend" id="overview-utilization-legend"></div>
+            </article>
+
+            <article class="command-panel memory-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Memory Load</span>
+                  <h2>Memory By GPU</h2>
+                </div>
+                <span class="panel-chip">0-24.0 GB</span>
+              </div>
+              <div class="overview-bars" id="overview-memory-bars" aria-label="Current GPU memory usage by GPU"></div>
+            </article>
+
+            <article class="command-panel temperature-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Thermals</span>
+                  <h2>Temperature By GPU</h2>
+                </div>
+                <span class="panel-chip">0-110 C</span>
+              </div>
+              <svg
+                class="overview-chart overview-trend-chart chart-temperature"
+                id="overview-temperature-chart"
+                viewBox="0 0 620 220"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label="GPU temperature trend chart with red zone above 90 C"
+                aria-describedby="overview-temperature-tooltip"
+                tabindex="0"
+              ></svg>
+              <div class="chart-tooltip" id="overview-temperature-tooltip" role="tooltip" hidden></div>
+            </article>
+
+            <article class="command-panel power-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Load Balance</span>
+                  <h2>Power Draw</h2>
+                </div>
+                <span class="panel-chip">0-230 W</span>
+              </div>
+              <div class="overview-bars" id="overview-power-bars" aria-label="Current power draw comparison"></div>
+            </article>
+
+            <article class="command-panel gpu-fleet-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">GPU Fleet</span>
+                  <h2>Status Tiles</h2>
+                </div>
+                <span class="panel-chip" id="overview-fleet-chip">-- GPUs</span>
+              </div>
+              <section class="overview-gpu-grid" id="gpu-grid" aria-label="Detected GPU status tiles"></section>
+            </article>
+          </section>
+        </section>
+
+        <section class="view-section gpu-detail-view" id="gpu-detail-view" data-view="gpu" role="tabpanel" hidden>
+          <article class="detail-hero detail-panel" id="gpu-detail-shell">
+            <div class="detail-hero-copy">
+              <div>
+                <span class="gpu-index" id="detail-gpu-index">GPU --</span>
+                <h2 class="gpu-name" id="detail-gpu-name">Select a GPU</h2>
+                <p class="detail-intro" id="detail-intro">
+                  Individual GPU navigation is ready. Detailed telemetry will appear after the first snapshot.
+                </p>
+              </div>
+              <span class="gpu-health" id="detail-gpu-health">Waiting</span>
+            </div>
+            <div class="detail-hero-metrics">
+              <div class="detail-hero-metric">
+                <span class="metric-label">Utilization</span>
+                <strong id="detail-utilization">--</strong>
+              </div>
+              <div class="detail-hero-metric">
+                <span class="metric-label">Memory</span>
+                <strong id="detail-memory">--</strong>
+              </div>
+              <div class="detail-hero-metric">
+                <span class="metric-label">Temperature</span>
+                <strong id="detail-temperature">--</strong>
+              </div>
+              <div class="detail-hero-metric">
+                <span class="metric-label">Power</span>
+                <strong id="detail-power">--</strong>
+              </div>
+              <div class="detail-hero-metric">
+                <span class="metric-label">Fan</span>
+                <strong id="detail-fan">--</strong>
+              </div>
+            </div>
+          </article>
+
+          <section class="detail-dashboard-grid" aria-label="Selected GPU details">
+            <article class="detail-panel detail-history-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Deep History</span>
+                  <h2>Selected GPU Trends</h2>
+                </div>
+                <span class="panel-chip" id="detail-history-chip">--</span>
+              </div>
+              <div class="detail-history-grid">
+                <div class="detail-history-item">
+                  <span class="metric-label">GPU Utilization</span>
+                  <svg
+                    class="overview-chart detail-history-chart"
+                    id="detail-history-utilization"
+                    viewBox="0 0 620 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="Selected GPU utilization history"
+                    aria-describedby="detail-history-utilization-tooltip"
+                    tabindex="0"
+                  ></svg>
+                  <div class="chart-tooltip" id="detail-history-utilization-tooltip" role="tooltip" hidden></div>
+                </div>
+                <div class="detail-history-item">
+                  <span class="metric-label">Memory Used</span>
+                  <svg
+                    class="overview-chart detail-history-chart chart-memory"
+                    id="detail-history-memory"
+                    viewBox="0 0 620 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="Selected GPU memory usage history from 0 to 24 GB"
+                    aria-describedby="detail-history-memory-tooltip"
+                    tabindex="0"
+                  ></svg>
+                  <div class="chart-tooltip" id="detail-history-memory-tooltip" role="tooltip" hidden></div>
+                </div>
+                <div class="detail-history-item">
+                  <span class="metric-label">Temperature</span>
+                  <svg
+                    class="overview-chart detail-history-chart chart-temperature"
+                    id="detail-history-temperature"
+                    viewBox="0 0 620 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="Selected GPU temperature history from 0 to 110 C"
+                    aria-describedby="detail-history-temperature-tooltip"
+                    tabindex="0"
+                  ></svg>
+                  <div class="chart-tooltip" id="detail-history-temperature-tooltip" role="tooltip" hidden></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="detail-panel detail-metrics-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Telemetry</span>
+                  <h2>Full Metric Set</h2>
+                </div>
+                <span class="panel-chip" id="detail-updated-chip">--</span>
+              </div>
+              <div class="detail-metric-grid" id="detail-metric-grid"></div>
+            </article>
+
+            <article class="detail-panel detail-memory-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Memory</span>
+                  <h2>Framebuffer Breakdown</h2>
+                </div>
+                <span class="panel-chip" id="detail-memory-chip">--</span>
+              </div>
+              <div class="detail-memory-bars" id="detail-memory-bars"></div>
+            </article>
+
+            <article class="detail-panel detail-technical-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">NVML Fields</span>
+                  <h2>Clocks And Availability</h2>
+                </div>
+                <span class="panel-chip" id="detail-uuid-chip">--</span>
+              </div>
+              <div class="detail-technical-grid" id="detail-technical-grid"></div>
+              <div class="unavailable-panel">
+                <span class="metric-label">Unavailable Metrics</span>
+                <ul class="detail-unavailable-list" id="detail-unavailable-list"></ul>
+              </div>
+            </article>
+
+            <article class="detail-panel detail-process-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">GPU Processes</span>
+                  <h2>Runtime Workloads</h2>
+                </div>
+                <span class="panel-chip" id="detail-process-count">--</span>
+              </div>
+              <div class="detail-process-notices" id="detail-process-notices"></div>
+              <div class="process-list detail-process-list" id="detail-process-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view-section" id="diagnostics-view" data-view="diagnostics" role="tabpanel" hidden>
+          <section class="diagnostics-panel" id="diagnostics-panel" aria-label="NVIDIA diagnostics">
+            <div class="section-heading">
+              <div>
+                <span class="metric-label">Diagnostics</span>
+                <h2>NVIDIA Runtime</h2>
+              </div>
+              <span class="diagnostics-status" id="diagnostics-status">Checking</span>
+            </div>
+            <div class="diagnostics-grid" id="diagnostics-grid"></div>
+            <ul class="diagnostics-issues" id="diagnostics-issues"></ul>
+          </section>
+        </section>
+
+        <template id="gpu-card-template">
+          <a class="overview-gpu-tile" href="#overview">
+            <div class="overview-gpu-header">
+              <div>
+                <span class="gpu-index"></span>
+                <h2 class="gpu-name"></h2>
+              </div>
+              <span class="gpu-health"></span>
+            </div>
+
+            <div class="overview-gpu-meter">
+              <div class="metric-row">
+                <div>
+                  <span class="metric-label">Utilization</span>
+                  <strong class="utilization-value"></strong>
+                </div>
+                <div class="meter" aria-hidden="true">
+                  <span class="utilization-bar"></span>
+                </div>
+              </div>
+
+              <div class="metric-row">
+                <div>
+                  <span class="metric-label">Memory</span>
+                  <strong class="memory-value"></strong>
+                </div>
+                <div class="meter" aria-hidden="true">
+                  <span class="memory-bar"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="overview-sensor-strip">
+              <div class="sensor">
+                <span class="metric-label">Temp</span>
+                <strong class="temperature-value"></strong>
+              </div>
+              <div class="sensor">
+                <span class="metric-label">Power</span>
+                <strong class="power-value"></strong>
+              </div>
+              <div class="sensor">
+                <span class="metric-label">Fan</span>
+                <strong class="fan-value"></strong>
+              </div>
+            </div>
+
+            <div class="overview-mini-trends" aria-label="Recent GPU history">
+              <div class="mini-chart">
+                <span class="metric-label">Util</span>
+                <svg class="chart-svg chart-utilization" viewBox="0 0 120 42" preserveAspectRatio="none" role="img" aria-label="Recent utilization history"></svg>
+              </div>
+              <div class="mini-chart">
+                <span class="metric-label">Mem</span>
+                <svg class="chart-svg chart-memory" viewBox="0 0 120 42" preserveAspectRatio="none" role="img" aria-label="Recent memory history"></svg>
+              </div>
+              <div class="mini-chart">
+                <span class="metric-label">Temp</span>
+                <svg class="chart-svg chart-temperature" viewBox="0 0 120 42" preserveAspectRatio="none" role="img" aria-label="Recent temperature history"></svg>
+              </div>
+            </div>
+          </a>
+        </template>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

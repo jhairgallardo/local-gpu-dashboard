@@ -1,0 +1,40 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local configuration and logs
+.env
+.env.*
+*.log
+*.tmp
+tmp/
+scratch/
+
+# Editor and OS files
+.DS_Store
+*.swp
+*.swo
+
+# Generated local media
+screenshots/
+captures/
+!docs/
+!docs/screenshots/
+!docs/screenshots/*.png
+
+# Local reference assets
+inspiration.jpg
+
+# Local assistant and maintainer workflow notes
+AGENTS.md
+implementation_guide.md
+RELEASE_CHECKLIST.md
