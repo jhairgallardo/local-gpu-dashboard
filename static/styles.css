@@ -743,9 +743,14 @@ h1 {
   stroke: var(--series-color, currentColor);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 3;
+  stroke-width: 2.1;
   filter: drop-shadow(0 0 8px color-mix(in srgb, var(--series-color, var(--cyan)), var(--transparent) 35%));
   vector-effect: non-scaling-stroke;
+}
+
+.overview-chart-point {
+  fill: var(--series-color, currentColor);
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--series-color, var(--cyan)), var(--transparent) 35%));
 }
 
 .overview-chart-line.is-empty {
@@ -1229,8 +1234,13 @@ h1 {
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.4;
+  stroke-width: 1.7;
   vector-effect: non-scaling-stroke;
+}
+
+.chart-point {
+  fill: currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
 }
 
 .process-list {

@@ -108,14 +108,14 @@ def _demo_gpu(index: int, now: float) -> Dict[str, Any]:
         {
             "name": "NVIDIA RTX A5000 Demo 0",
             "uuid": "GPU-DEMO-0000-UTILIZATION",
-            "util_base": 72,
-            "util_amp": 18,
-            "mem_base": 5400,
-            "mem_amp": 850,
-            "temp_base": 78,
-            "temp_amp": 7,
-            "power_base": 178,
-            "power_amp": 24,
+            "memory_base": 5200,
+            "memory_steps": [(0.16, 720), (0.38, 1150), (0.67, -820), (0.82, 540)],
+            "memory_period": 84,
+            "memory_phase": 0.08,
+            "temp_idle": 48,
+            "temp_gain": 0.42,
+            "power_idle": 43,
+            "power_gain": 1.72,
             "fan_base": 64,
             "clock_base": 1530,
             "memory_clock": 8001,
@@ -123,14 +123,14 @@ def _demo_gpu(index: int, now: float) -> Dict[str, Any]:
         {
             "name": "NVIDIA RTX A5000 Demo 1",
             "uuid": "GPU-DEMO-0001-RENDERING",
-            "util_base": 48,
-            "util_amp": 24,
-            "mem_base": 8400,
-            "mem_amp": 1250,
-            "temp_base": 62,
-            "temp_amp": 6,
-            "power_base": 132,
-            "power_amp": 19,
+            "memory_base": 7400,
+            "memory_steps": [(0.22, 920), (0.48, 470), (0.74, -660), (0.9, 310)],
+            "memory_period": 112,
+            "memory_phase": 0.31,
+            "temp_idle": 43,
+            "temp_gain": 0.34,
+            "power_idle": 39,
+            "power_gain": 1.34,
             "fan_base": 48,
             "clock_base": 1365,
             "memory_clock": 8001,
@@ -138,14 +138,14 @@ def _demo_gpu(index: int, now: float) -> Dict[str, Any]:
         {
             "name": "NVIDIA RTX A5000 Demo 2",
             "uuid": "GPU-DEMO-0002-IDLE",
-            "util_base": 18,
-            "util_amp": 13,
-            "mem_base": 2300,
-            "mem_amp": 420,
-            "temp_base": 49,
-            "temp_amp": 4,
-            "power_base": 74,
-            "power_amp": 14,
+            "memory_base": 2150,
+            "memory_steps": [(0.2, 180), (0.43, -90), (0.58, 230), (0.86, -140)],
+            "memory_period": 96,
+            "memory_phase": 0.58,
+            "temp_idle": 38,
+            "temp_gain": 0.28,
+            "power_idle": 31,
+            "power_gain": 0.95,
             "fan_base": None,
             "clock_base": 1050,
             "memory_clock": 7001,
@@ -153,37 +153,33 @@ def _demo_gpu(index: int, now: float) -> Dict[str, Any]:
         {
             "name": "NVIDIA RTX A5000 Demo 3",
             "uuid": "GPU-DEMO-0003-HIGH-LOAD",
-            "util_base": 88,
-            "util_amp": 9,
-            "mem_base": 13300,
-            "mem_amp": 1800,
-            "temp_base": 84,
-            "temp_amp": 6,
-            "power_base": 203,
-            "power_amp": 16,
+            "memory_base": 12200,
+            "memory_steps": [(0.12, 1450), (0.34, 1320), (0.52, -960), (0.79, 780)],
+            "memory_period": 132,
+            "memory_phase": 0.17,
+            "temp_idle": 51,
+            "temp_gain": 0.38,
+            "power_idle": 48,
+            "power_gain": 1.68,
             "fan_base": 78,
             "clock_base": 1695,
             "memory_clock": 8001,
         },
     ]
     profile = profiles[index]
-    phase = index * 1.13
-    utilization = round(
-        _clamp(_wave(now, profile["util_base"], profile["util_amp"], 0.25, phase), 0, 100),
-        1,
-    )
+    utilization = round(_demo_utilization(index, now), 1)
     memory_used_mib = round(
         _clamp(
-            _wave(now, profile["mem_base"], profile["mem_amp"], 0.18, phase + 0.7),
+            _demo_memory_used(now, profile),
             256,
             DEMO_MEMORY_TOTAL_MIB - 512,
         ),
         1,
     )
-    temperature = int(round(_wave(now, profile["temp_base"], profile["temp_amp"], 0.16, phase + 1.5)))
+    temperature = int(round(_demo_temperature(now, profile, utilization)))
     power_draw = round(
         _clamp(
-            _wave(now, profile["power_base"], profile["power_amp"], 0.22, phase + 0.2),
+            _demo_power_draw(now, profile, utilization),
             35,
             DEMO_POWER_LIMIT_WATTS,
         ),
@@ -191,7 +187,7 @@ def _demo_gpu(index: int, now: float) -> Dict[str, Any]:
     )
     fan = None
     if profile["fan_base"] is not None:
-        fan = int(round(_clamp(_wave(now, profile["fan_base"], 8, 0.2, phase + 1.1), 20, 100)))
+        fan = int(round(_clamp(_demo_fan_speed(now, profile, temperature), 20, 100)))
 
     unavailable_metrics: List[Dict[str, str]] = []
     if fan is None:
@@ -226,7 +222,7 @@ def _demo_gpu(index: int, now: float) -> Dict[str, Any]:
         },
         "fan_speed_percent": fan,
         "clocks": {
-            "graphics_mhz": None if index == 2 else int(round(_wave(now, profile["clock_base"], 110, 0.21, phase))),
+            "graphics_mhz": None if index == 2 else int(round(_demo_graphics_clock(now, profile, utilization))),
             "memory_mhz": profile["memory_clock"],
         },
         "processes": runtime_config.apply_process_privacy(_demo_processes(index)),
@@ -371,8 +367,121 @@ def _memory_payload(used_mib: float, total_mib: float) -> Dict[str, Any]:
     }
 
 
-def _wave(now: float, base: float, amplitude: float, speed: float, phase: float) -> float:
-    return base + amplitude * math.sin(now * speed + phase)
+def _demo_utilization(index: int, now: float) -> float:
+    """Return deterministic but workload-like utilization for a demo GPU."""
+
+    if index == 0:
+        cycle = _cycle(now, 42, 0.03)
+        bursts = [
+            (0.08, 0.18, 18),
+            (0.24, 0.34, 25),
+            (0.48, 0.58, 17),
+            (0.74, 0.84, 22),
+        ]
+        validation_dip = -24 if 0.62 <= cycle <= 0.7 else 0
+        value = 57 + validation_dip + sum(
+            _pulse(cycle, start, end) * amount for start, end, amount in bursts
+        )
+        value += _jitter(now, index, 5.5)
+        return _clamp(value, 38, 96)
+
+    if index == 1:
+        ramp = _cycle(now, 26, 0.21)
+        tile_load = 22 + 50 * ramp
+        reset_dip = -18 if ramp > 0.86 else 0
+        value = tile_load + reset_dip + _jitter(now, index, 4.2)
+        return _clamp(value, 14, 78)
+
+    if index == 2:
+        cycle = _cycle(now, 58, 0.47)
+        background_spikes = (
+            _pulse(cycle, 0.18, 0.24) * 22
+            + _pulse(cycle, 0.53, 0.58) * 14
+            + _pulse(cycle, 0.81, 0.86) * 28
+        )
+        value = 5 + background_spikes + _jitter(now, index, 2.0)
+        return _clamp(value, 0, 38)
+
+    cycle = _cycle(now, 50, 0.66)
+    batch_wave = 82 + 8 * math.sin(now * 0.31 + 1.1)
+    service_dip = -19 * _pulse(cycle, 0.32, 0.43)
+    queue_spike = 7 * _pulse(cycle, 0.74, 0.79)
+    value = batch_wave + service_dip + queue_spike + _jitter(now, index, 3.8)
+    return _clamp(value, 55, 99)
+
+
+def _demo_memory_used(now: float, profile: Mapping[str, Any]) -> float:
+    """Return memory as plateaus and steps, closer to real allocations."""
+
+    cycle = _cycle(now, profile["memory_period"], profile["memory_phase"])
+    used_mib = float(profile["memory_base"])
+    for threshold, delta_mib in profile["memory_steps"]:
+        if cycle >= threshold:
+            used_mib += float(delta_mib)
+
+    drift = 90 * math.sin(now * 0.035 + profile["memory_phase"] * 9)
+    small_reclaim = -140 * _pulse(cycle, 0.93, 0.98)
+    return used_mib + drift + small_reclaim
+
+
+def _demo_temperature(now: float, profile: Mapping[str, Any], utilization: float) -> float:
+    """Return slower temperature movement that lags utilization changes."""
+
+    delayed_utilization = 0.72 * utilization + 0.28 * (
+        utilization + 13 * math.sin((now - 18) * 0.07 + profile["memory_phase"] * 4)
+    )
+    value = profile["temp_idle"] + profile["temp_gain"] * delayed_utilization
+    value += 1.8 * math.sin(now * 0.026 + profile["memory_phase"] * 6)
+    value += _jitter(now, int(profile["memory_phase"] * 100), 0.7)
+    return _clamp(value, 34, 92)
+
+
+def _demo_power_draw(now: float, profile: Mapping[str, Any], utilization: float) -> float:
+    value = profile["power_idle"] + profile["power_gain"] * utilization
+    value += 4.5 * math.sin(now * 0.19 + profile["memory_phase"] * 5)
+    value += _jitter(now, int(profile["power_idle"]), 3.0)
+    return value
+
+
+def _demo_fan_speed(now: float, profile: Mapping[str, Any], temperature: float) -> float:
+    thermal_target = profile["fan_base"] + max(0, temperature - 65) * 0.9
+    return thermal_target + 2.4 * math.sin(now * 0.05 + profile["memory_phase"] * 8)
+
+
+def _demo_graphics_clock(now: float, profile: Mapping[str, Any], utilization: float) -> float:
+    boost = 1 if utilization >= 45 else 0.55
+    value = profile["clock_base"] * boost
+    value += 75 * math.sin(now * 0.13 + profile["memory_phase"] * 7)
+    value += _jitter(now, int(profile["clock_base"]), 24)
+    return _clamp(value, 420, 1845)
+
+
+def _cycle(now: float, period: float, phase: float) -> float:
+    return ((now / period) + phase) % 1.0
+
+
+def _pulse(position: float, start: float, end: float) -> float:
+    if position < start or position > end:
+        return 0.0
+
+    midpoint = start + (end - start) / 2
+    if position <= midpoint:
+        return _smoothstep((position - start) / max(midpoint - start, 0.001))
+
+    return _smoothstep((end - position) / max(end - midpoint, 0.001))
+
+
+def _smoothstep(value: float) -> float:
+    amount = _clamp(value, 0, 1)
+    return amount * amount * (3 - 2 * amount)
+
+
+def _jitter(now: float, seed: int, amplitude: float) -> float:
+    return amplitude * (
+        0.58 * math.sin(now * (0.91 + seed * 0.011) + seed * 1.7)
+        + 0.29 * math.sin(now * (1.73 + seed * 0.007) + seed * 0.41)
+        + 0.13 * math.sin(now * (3.27 + seed * 0.003) + seed * 2.3)
+    )
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

@@ -589,7 +589,6 @@ function renderMultiGpuTrendChart(svg, gpus, metric, maxValue, options = {}) {
     bottom: basePadding,
     left: showAxisLabels ? 56 : basePadding,
   };
-  const plotWidth = box.width - padding.left - padding.right;
   const axisTicks = options.axisTicks || (showAxisLabels ? [0, 25, 50, 75, 100] : [25, 50, 75]);
   const gridLines = axisTicks.map((tick) => {
     const y = yForChartValue(tick, maxValue, box, padding);
@@ -611,26 +610,13 @@ function renderMultiGpuTrendChart(svg, gpus, metric, maxValue, options = {}) {
   const polylines = gpus
     .map((gpu) => {
       const history = histories.get(getGpuKey(gpu)) || [];
-      const values = history.map((point) => point[metric]).filter(Number.isFinite);
-      if (values.length === 0) {
+      const points = makeRightAlignedChartPoints(history, metric, maxValue, box, padding);
+      if (points.length === 0) {
         return "";
       }
 
       const accent = getGpuAccent(gpu.index);
-      const points = values.map((value, index) => {
-        const x =
-          values.length === 1
-            ? padding.left
-            : padding.left + (index / (values.length - 1)) * plotWidth;
-        const y = yForChartValue(value, maxValue, box, padding);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      });
-
-      if (values.length === 1) {
-        points.push(`${(box.width - padding.right).toFixed(1)},${points[0].split(",")[1]}`);
-      }
-
-      return `<polyline class="overview-chart-line" style="--series-color: ${accent.color}" points="${points.join(" ")}"></polyline>`;
+      return makeOverviewChartSeries(points, accent.color);
     })
     .join("");
 
@@ -655,6 +641,39 @@ function renderMultiGpuTrendChart(svg, gpus, metric, maxValue, options = {}) {
 function yForChartValue(value, maxValue, box, padding) {
   const ratio = Math.max(0, Math.min(1, value / maxValue));
   return box.height - padding.bottom - ratio * (box.height - padding.top - padding.bottom);
+}
+
+function makeRightAlignedChartPoints(history, metric, maxValue, box, padding) {
+  const sourceHistory = Array.isArray(history) ? history.slice(-HISTORY_LIMIT) : [];
+  const slotCount = Math.max(HISTORY_LIMIT, 2);
+  const firstSlot = Math.max(0, slotCount - sourceHistory.length);
+  const plotWidth = box.width - padding.left - padding.right;
+  const points = [];
+
+  sourceHistory.forEach((point, index) => {
+    const value = point?.[metric];
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    const slot = firstSlot + index;
+    const x = padding.left + (slot / (slotCount - 1)) * plotWidth;
+    const y = yForChartValue(value, maxValue, box, padding);
+    points.push({ x, y });
+  });
+
+  return points;
+}
+
+function makeOverviewChartSeries(points, color) {
+  const style = `style="--series-color: ${color}"`;
+  if (points.length === 1) {
+    const point = points[0];
+    return `<circle class="overview-chart-point" ${style} cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.4"></circle>`;
+  }
+
+  const pointString = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  return `<polyline class="overview-chart-line" ${style} points="${pointString}"></polyline>`;
 }
 
 function makeChartDangerZone(box, padding, maxValue, startValue) {
@@ -687,7 +706,14 @@ function showOverviewTrendTooltip(svg, tooltip, event, useLatest = false) {
   }
 
   const sampleRatio = useLatest || !event ? 1 : getChartSampleRatio(event, svg, data);
-  const rows = data.gpus.map((gpu) => getOverviewTrendTooltipRow(gpu, data, sampleRatio));
+  const rows = data.gpus
+    .map((gpu) => getOverviewTrendTooltipRow(gpu, data, sampleRatio))
+    .filter((row) => row.available);
+  if (rows.length === 0) {
+    hideChartTooltip(tooltip);
+    return;
+  }
+
   tooltip.replaceChildren(makeTooltipTitle(data.tooltipTitle || formatMetricName(data.metric)), ...rows.map(renderTooltipRow));
   tooltip.hidden = false;
   positionOverviewTrendTooltip(svg, tooltip, event);
@@ -702,6 +728,11 @@ function showDetailHistoryTooltip(svg, tooltip, event, useLatest = false) {
 
   const sampleRatio = useLatest || !event ? 1 : getChartSampleRatio(event, svg, data);
   const row = getDetailHistoryTooltipRow(data, sampleRatio);
+  if (!row.available) {
+    hideChartTooltip(tooltip);
+    return;
+  }
+
   tooltip.replaceChildren(makeTooltipTitle(data.tooltipTitle || "History"), renderTooltipRow(row));
   tooltip.hidden = false;
   positionChartTooltip(svg, tooltip, event);
@@ -720,30 +751,54 @@ function getChartSampleRatio(event, svg, data) {
 
 function getOverviewTrendTooltipRow(gpu, data, sampleRatio) {
   const history = histories.get(getGpuKey(gpu)) || [];
-  const index = history.length <= 1 ? 0 : Math.round(sampleRatio * (history.length - 1));
-  const value = history[index]?.[data.metric];
+  const index = getRightAlignedHistoryIndex(history, sampleRatio);
+  const value = index >= 0 ? history[index]?.[data.metric] : null;
   const formatter =
     typeof data.formatTooltipValue === "function" ? data.formatTooltipValue : (metricValue) => String(metricValue);
   const accent = getGpuAccent(gpu.index);
+  const available = Number.isFinite(value);
 
   return {
+    available,
     color: accent.color,
     label: `GPU ${gpu.index ?? "--"}`,
-    value: Number.isFinite(value) ? formatter(value) : "Unavailable",
+    value: available ? formatter(value) : "Unavailable",
   };
 }
 
 function getDetailHistoryTooltipRow(data, sampleRatio) {
-  const index = data.history.length <= 1 ? 0 : Math.round(sampleRatio * (data.history.length - 1));
-  const value = data.history[index]?.[data.metric];
+  const index = getRightAlignedHistoryIndex(data.history, sampleRatio);
+  const value = index >= 0 ? data.history[index]?.[data.metric] : null;
   const formatter =
     typeof data.formatTooltipValue === "function" ? data.formatTooltipValue : (metricValue) => String(metricValue);
+  const available = Number.isFinite(value);
 
   return {
+    available,
     color: data.color,
     label: data.tooltipLabel || formatMetricName(data.metric),
-    value: Number.isFinite(value) ? formatter(value) : "Unavailable",
+    value: available ? formatter(value) : "Unavailable",
   };
+}
+
+function getRightAlignedHistoryIndex(history, sampleRatio) {
+  const fullHistory = Array.isArray(history) ? history : [];
+  const sourceStartIndex = Math.max(0, fullHistory.length - HISTORY_LIMIT);
+  const sourceHistory = fullHistory.slice(sourceStartIndex);
+  if (sourceHistory.length === 0) {
+    return -1;
+  }
+
+  const slotCount = Math.max(HISTORY_LIMIT, 2);
+  const firstSlot = Math.max(0, slotCount - sourceHistory.length);
+  const safeRatio = clampNumber(sampleRatio, 0, 1) ?? 1;
+  const targetSlot = Math.round(safeRatio * (slotCount - 1));
+
+  if (targetSlot < firstSlot) {
+    return -1;
+  }
+
+  return sourceStartIndex + Math.min(sourceHistory.length - 1, targetSlot - firstSlot);
 }
 
 function makeTooltipTitle(text) {
@@ -1233,7 +1288,6 @@ function renderDetailHistoryChart(svg, history, metric, maxValue, color, options
     bottom: 18,
     left: 62,
   };
-  const plotWidth = box.width - padding.left - padding.right;
   const sourceHistory = Array.isArray(history) ? history : [];
   const axisTicks = options.axisTicks || [0, maxValue];
   const gridLines = axisTicks.map((tick) => {
@@ -1250,7 +1304,7 @@ function renderDetailHistoryChart(svg, history, metric, maxValue, color, options
   const dangerZone = Number.isFinite(options.dangerZoneStart)
     ? makeChartDangerZone(box, padding, maxValue, options.dangerZoneStart)
     : "";
-  const values = sourceHistory.map((point) => point[metric]).filter(Number.isFinite);
+  const points = makeRightAlignedChartPoints(sourceHistory, metric, maxValue, box, padding);
   const hitArea = options.enableTooltip
     ? `<rect class="overview-chart-hit-area" x="0" y="0" width="${box.width}" height="${box.height}"></rect>`
     : "";
@@ -1271,29 +1325,16 @@ function renderDetailHistoryChart(svg, history, metric, maxValue, color, options
     delete svg._tooltipData;
   }
 
-  if (values.length === 0) {
+  if (points.length === 0) {
     svg.innerHTML = `${dangerZone}${gridLines.join("")}${axisLabels}${makeEmptyChartLine(box, padding.left, padding.right, padding.bottom)}${hitArea}`;
     return;
-  }
-
-  const points = values.map((value, index) => {
-    const x =
-      values.length === 1
-        ? padding.left
-        : padding.left + (index / (values.length - 1)) * plotWidth;
-    const y = yForChartValue(value, maxValue, box, padding);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-
-  if (values.length === 1) {
-    points.push(`${(box.width - padding.right).toFixed(1)},${points[0].split(",")[1]}`);
   }
 
   svg.innerHTML = `
     ${dangerZone}
     ${gridLines.join("")}
     ${axisLabels}
-    <polyline class="overview-chart-line" style="--series-color: ${color}" points="${points.join(" ")}"></polyline>
+    ${makeOverviewChartSeries(points, color)}
     ${hitArea}
   `;
 }
@@ -1632,33 +1673,51 @@ function recordHistory(gpu) {
 }
 
 function renderChart(svg, history, metric, maxValue) {
-  const values = history
-    .map((point) => point[metric])
-    .filter((value) => Number.isFinite(value));
   const width = 120;
   const height = 42;
   const padding = 3;
+  const points = makeRightAlignedCompactChartPoints(history, metric, maxValue, width, height, padding);
 
-  if (values.length === 0) {
+  if (points.length === 0) {
     svg.innerHTML = `<line class="chart-baseline" x1="0" y1="${height - padding}" x2="${width}" y2="${height - padding}"></line>`;
     return;
   }
 
-  const points = values.map((value, index) => {
-    const x = values.length === 1 ? width : (index / (values.length - 1)) * width;
-    const ratio = Math.max(0, Math.min(1, value / maxValue));
-    const y = height - padding - ratio * (height - padding * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-
-  if (values.length === 1) {
-    points.unshift(`0,${points[0].split(",")[1]}`);
-  }
+  const series =
+    points.length === 1
+      ? `<circle class="chart-point" cx="${points[0].x.toFixed(1)}" cy="${points[0].y.toFixed(1)}" r="2.6"></circle>`
+      : `<polyline class="chart-line" points="${points
+          .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+          .join(" ")}"></polyline>`;
 
   svg.innerHTML = `
     <line class="chart-baseline" x1="0" y1="${height - padding}" x2="${width}" y2="${height - padding}"></line>
-    <polyline class="chart-line" points="${points.join(" ")}"></polyline>
+    ${series}
   `;
+}
+
+function makeRightAlignedCompactChartPoints(history, metric, maxValue, width, height, padding) {
+  const sourceHistory = Array.isArray(history) ? history.slice(-HISTORY_LIMIT) : [];
+  const slotCount = Math.max(HISTORY_LIMIT, 2);
+  const firstSlot = Math.max(0, slotCount - sourceHistory.length);
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const points = [];
+
+  sourceHistory.forEach((point, index) => {
+    const value = point?.[metric];
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    const slot = firstSlot + index;
+    const x = padding + (slot / (slotCount - 1)) * plotWidth;
+    const ratio = Math.max(0, Math.min(1, value / maxValue));
+    const y = height - padding - ratio * plotHeight;
+    points.push({ x, y });
+  });
+
+  return points;
 }
 
 function parseViewBox(svg, fallbackWidth, fallbackHeight) {
