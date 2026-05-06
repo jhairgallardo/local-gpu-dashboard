@@ -1,6 +1,6 @@
 # GPU Usage Dashboard
 
-[![CI](https://github.com/jhairgallardo/gpu_usage_dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/jhairgallardo/gpu_usage_dashboard/actions/workflows/ci.yml)
+[![CI](https://github.com/jhairgallardo/local-gpu-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/jhairgallardo/local-gpu-dashboard/actions/workflows/ci.yml)
 
 A local, browser-based NVIDIA GPU monitoring dashboard for Linux workstations.
 It shows real-time usage, memory, temperature, power, fan, clock, process, and
@@ -80,8 +80,8 @@ sudo apt install python3 python3-venv
 Clone the repository and start the local dashboard:
 
 ```bash
-git clone https://github.com/jhairgallardo/gpu_usage_dashboard.git
-cd gpu_usage_dashboard
+git clone https://github.com/jhairgallardo/local-gpu-dashboard.git
+cd local-gpu-dashboard
 chmod +x run_dashboard.sh
 ./run_dashboard.sh
 ```
@@ -296,7 +296,7 @@ reporting guidance. See `CHANGELOG.md` for release notes.
 ## Project Structure
 
 ```text
-gpu_usage_dashboard/
+local-gpu-dashboard/
 ├── .github/            # CI workflow and issue templates
 ├── app/                 # FastAPI app, diagnostics, and NVML collector
 ├── docs/screenshots/    # Public-safe demo screenshots used by README

@@ -9,8 +9,8 @@ and NVML-based GPU telemetry.
 Clone the repo and start the app:
 
 ```bash
-git clone https://github.com/jhairgallardo/gpu_usage_dashboard.git
-cd gpu_usage_dashboard
+git clone https://github.com/jhairgallardo/local-gpu-dashboard.git
+cd local-gpu-dashboard
 chmod +x run_dashboard.sh
 ./run_dashboard.sh
 ```
