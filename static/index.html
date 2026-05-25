@@ -46,6 +46,10 @@
           <div class="gpu-nav-list" id="gpu-nav-list" aria-live="polite">
             <span class="nav-empty">Awaiting GPUs</span>
           </div>
+          <a class="nav-link" href="#system" data-route="system" role="tab" aria-controls="system-view">
+            <span class="nav-icon" aria-hidden="true"></span>
+            System
+          </a>
           <a class="nav-link" href="#diagnostics" data-route="diagnostics" role="tab" aria-controls="diagnostics-view">
             <span class="nav-icon" aria-hidden="true"></span>
             Diagnostics
@@ -342,6 +346,132 @@
               </div>
               <div class="detail-process-notices" id="detail-process-notices"></div>
               <div class="process-list detail-process-list" id="detail-process-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view-section system-view" id="system-view" data-view="system" role="tabpanel" hidden>
+          <article class="detail-panel system-hero-panel">
+            <div class="detail-hero-copy">
+              <div>
+                <span class="metric-label">Host Resources</span>
+                <h2 class="gpu-name">System Telemetry</h2>
+                <p class="detail-intro" id="system-summary-message">
+                  CPU, memory, swap, load, and thermal telemetry will appear after the first system snapshot.
+                </p>
+              </div>
+              <span class="gpu-health" id="system-status-chip">Waiting</span>
+            </div>
+          </article>
+
+          <section class="command-kpi-grid system-kpi-grid" aria-label="System key metrics">
+            <article class="command-kpi">
+              <span class="metric-label">CPU Load</span>
+              <strong id="system-kpi-cpu">--</strong>
+              <small id="system-kpi-cpu-detail">Awaiting telemetry</small>
+            </article>
+            <article class="command-kpi">
+              <span class="metric-label">CPU Temperature</span>
+              <strong id="system-kpi-temperature">--</strong>
+              <small id="system-kpi-temperature-detail">Sensor unavailable</small>
+            </article>
+            <article class="command-kpi">
+              <span class="metric-label">RAM Used</span>
+              <strong id="system-kpi-memory">--</strong>
+              <small id="system-kpi-memory-detail">Used / total</small>
+            </article>
+            <article class="command-kpi">
+              <span class="metric-label">Swap Used</span>
+              <strong id="system-kpi-swap">--</strong>
+              <small id="system-kpi-swap-detail">Used / total</small>
+            </article>
+            <article class="command-kpi">
+              <span class="metric-label">Load Average</span>
+              <strong id="system-kpi-load">--</strong>
+              <small id="system-kpi-load-detail">1 / 5 / 15 min</small>
+            </article>
+            <article class="command-kpi">
+              <span class="metric-label">Uptime</span>
+              <strong id="system-kpi-uptime">--</strong>
+              <small id="system-kpi-uptime-detail">Host runtime</small>
+            </article>
+          </section>
+
+          <section class="system-dashboard-grid" aria-label="System resource details">
+            <article class="detail-panel system-history-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">System History</span>
+                  <h2>Host Resource Trends</h2>
+                </div>
+                <span class="panel-chip" id="system-history-chip">--</span>
+              </div>
+              <div class="detail-history-grid">
+                <div class="detail-history-item system-history-item">
+                  <span class="metric-label">CPU Utilization</span>
+                  <svg
+                    class="overview-chart detail-history-chart"
+                    id="system-history-cpu"
+                    viewBox="0 0 620 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="System CPU utilization history"
+                    aria-describedby="system-history-cpu-tooltip"
+                    tabindex="0"
+                  ></svg>
+                  <div class="chart-tooltip" id="system-history-cpu-tooltip" role="tooltip" hidden></div>
+                </div>
+                <div class="detail-history-item system-history-item">
+                  <span class="metric-label">CPU Temperature</span>
+                  <svg
+                    class="overview-chart detail-history-chart chart-temperature"
+                    id="system-history-temperature"
+                    viewBox="0 0 620 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="System CPU temperature history"
+                    aria-describedby="system-history-temperature-tooltip"
+                    tabindex="0"
+                  ></svg>
+                  <div class="chart-tooltip" id="system-history-temperature-tooltip" role="tooltip" hidden></div>
+                </div>
+                <div class="detail-history-item system-history-item">
+                  <span class="metric-label">RAM Used</span>
+                  <svg
+                    class="overview-chart detail-history-chart chart-memory"
+                    id="system-history-memory"
+                    viewBox="0 0 620 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="System RAM usage history"
+                    aria-describedby="system-history-memory-tooltip"
+                    tabindex="0"
+                  ></svg>
+                  <div class="chart-tooltip" id="system-history-memory-tooltip" role="tooltip" hidden></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="detail-panel system-resource-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">Memory</span>
+                  <h2>RAM And Swap</h2>
+                </div>
+                <span class="panel-chip" id="system-memory-chip">--</span>
+              </div>
+              <div class="detail-memory-bars" id="system-memory-bars"></div>
+            </article>
+
+            <article class="detail-panel system-cpu-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="metric-label">CPU</span>
+                  <h2>Processor Details</h2>
+                </div>
+                <span class="panel-chip" id="system-cpu-chip">--</span>
+              </div>
+              <div class="detail-metric-grid" id="system-cpu-detail-grid"></div>
             </article>
           </section>
         </section>

@@ -22,6 +22,7 @@ const viewNav = document.querySelector(".view-nav");
 const gpuNavList = document.querySelector("#gpu-nav-list");
 const overviewView = document.querySelector("#overview-view");
 const gpuDetailView = document.querySelector("#gpu-detail-view");
+const systemView = document.querySelector("#system-view");
 const diagnosticsView = document.querySelector("#diagnostics-view");
 const detailGpuIndex = document.querySelector("#detail-gpu-index");
 const detailGpuName = document.querySelector("#detail-gpu-name");
@@ -58,6 +59,19 @@ const overviewTemperatureChart = document.querySelector("#overview-temperature-c
 const overviewTemperatureTooltip = document.querySelector("#overview-temperature-tooltip");
 const overviewPowerBars = document.querySelector("#overview-power-bars");
 const overviewUtilizationLegend = document.querySelector("#overview-utilization-legend");
+const systemSummaryMessage = document.querySelector("#system-summary-message");
+const systemStatusChip = document.querySelector("#system-status-chip");
+const systemHistoryChip = document.querySelector("#system-history-chip");
+const systemMemoryChip = document.querySelector("#system-memory-chip");
+const systemCpuChip = document.querySelector("#system-cpu-chip");
+const systemMemoryBars = document.querySelector("#system-memory-bars");
+const systemCpuDetailGrid = document.querySelector("#system-cpu-detail-grid");
+const systemHistoryCpu = document.querySelector("#system-history-cpu");
+const systemHistoryTemperature = document.querySelector("#system-history-temperature");
+const systemHistoryMemory = document.querySelector("#system-history-memory");
+const systemHistoryCpuTooltip = document.querySelector("#system-history-cpu-tooltip");
+const systemHistoryTemperatureTooltip = document.querySelector("#system-history-temperature-tooltip");
+const systemHistoryMemoryTooltip = document.querySelector("#system-history-memory-tooltip");
 const overviewKpis = {
   gpus: {
     value: document.querySelector("#overview-kpi-gpus"),
@@ -84,6 +98,32 @@ const overviewKpis = {
     detail: document.querySelector("#overview-kpi-power-detail"),
   },
 };
+const systemKpis = {
+  cpu: {
+    value: document.querySelector("#system-kpi-cpu"),
+    detail: document.querySelector("#system-kpi-cpu-detail"),
+  },
+  temperature: {
+    value: document.querySelector("#system-kpi-temperature"),
+    detail: document.querySelector("#system-kpi-temperature-detail"),
+  },
+  memory: {
+    value: document.querySelector("#system-kpi-memory"),
+    detail: document.querySelector("#system-kpi-memory-detail"),
+  },
+  swap: {
+    value: document.querySelector("#system-kpi-swap"),
+    detail: document.querySelector("#system-kpi-swap-detail"),
+  },
+  load: {
+    value: document.querySelector("#system-kpi-load"),
+    detail: document.querySelector("#system-kpi-load-detail"),
+  },
+  uptime: {
+    value: document.querySelector("#system-kpi-uptime"),
+    detail: document.querySelector("#system-kpi-uptime-detail"),
+  },
+};
 
 const GPU_ACCENTS = [
   { color: "#24d7e8", rgb: "36, 215, 232" },
@@ -98,9 +138,13 @@ const detailHistoryTooltipTargets = [
   { chart: detailHistoryUtilization, tooltip: detailHistoryUtilizationTooltip },
   { chart: detailHistoryMemory, tooltip: detailHistoryMemoryTooltip },
   { chart: detailHistoryTemperature, tooltip: detailHistoryTemperatureTooltip },
+  { chart: systemHistoryCpu, tooltip: systemHistoryCpuTooltip },
+  { chart: systemHistoryTemperature, tooltip: systemHistoryTemperatureTooltip },
+  { chart: systemHistoryMemory, tooltip: systemHistoryMemoryTooltip },
 ];
 
 const histories = new Map();
+const systemHistory = [];
 const renderedCards = new Map();
 
 let pollTimer = null;
@@ -108,6 +152,8 @@ let inFlight = false;
 let failureCount = 0;
 let hasRenderedSnapshot = false;
 let currentSnapshot = null;
+let currentSystemSnapshot = null;
+let systemFailureCount = 0;
 let currentRoute = parseRoute();
 
 function initializeTheme() {
@@ -235,6 +281,10 @@ function handleNavigationKeydown(event) {
 function parseRoute() {
   const hash = window.location.hash.replace(/^#/, "").trim().toLowerCase();
 
+  if (hash === "system") {
+    return { view: "system", gpuIndex: null };
+  }
+
   if (hash === "diagnostics") {
     return { view: "diagnostics", gpuIndex: null };
   }
@@ -267,16 +317,22 @@ async function requestSnapshot() {
   }
 
   try {
-    const response = await fetch("/api/snapshot", {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
+    const [snapshotResult, systemResult] = await Promise.allSettled([
+      fetchJson("/api/snapshot"),
+      fetchJson("/api/system"),
+    ]);
 
-    if (!response.ok) {
-      throw new Error(`Snapshot request failed with HTTP ${response.status}`);
+    if (systemResult.status === "fulfilled") {
+      renderSystemSnapshot(systemResult.value);
+    } else {
+      renderSystemPollFailure(systemResult.reason);
     }
 
-    const snapshot = await response.json();
+    if (snapshotResult.status === "rejected") {
+      throw snapshotResult.reason;
+    }
+
+    const snapshot = snapshotResult.value;
     failureCount = 0;
     hasRenderedSnapshot = true;
     renderSnapshot(snapshot);
@@ -287,6 +343,19 @@ async function requestSnapshot() {
     inFlight = false;
     scheduleNextPoll();
   }
+}
+
+async function fetchJson(path) {
+  const response = await fetch(path, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`${path} request failed with HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 function scheduleNextPoll() {
@@ -315,6 +384,7 @@ function setLoadingState() {
   statePanel.dataset.state = "loading";
   stateMessage.textContent = "Awaiting GPU telemetry.";
   setDiagnosticsLoading();
+  setSystemLoading();
 }
 
 function renderSnapshot(snapshot) {
@@ -361,6 +431,7 @@ function renderCurrentView() {
 
   overviewView.hidden = currentRoute.view !== "overview";
   gpuDetailView.hidden = currentRoute.view !== "gpu";
+  systemView.hidden = currentRoute.view !== "system";
   diagnosticsView.hidden = currentRoute.view !== "diagnostics";
   updateActiveNavigation(activeRouteKey);
 
@@ -371,6 +442,11 @@ function renderCurrentView() {
 
   if (currentRoute.view === "gpu") {
     renderGpuDetailView(gpus);
+    return;
+  }
+
+  if (currentRoute.view === "system") {
+    renderSystemView(currentSystemSnapshot);
   }
 }
 
@@ -1339,6 +1415,255 @@ function renderDetailHistoryChart(svg, history, metric, maxValue, color, options
   `;
 }
 
+function renderSystemSnapshot(snapshot) {
+  systemFailureCount = 0;
+  currentSystemSnapshot = snapshot;
+  recordSystemHistory(snapshot);
+
+  if (currentRoute.view === "system") {
+    renderSystemView(snapshot);
+  }
+}
+
+function renderSystemPollFailure(error) {
+  systemFailureCount += 1;
+
+  if (!currentSystemSnapshot) {
+    currentSystemSnapshot = {
+      ok: false,
+      status: "error",
+      timestamp: null,
+      errors: [
+        {
+          message: error?.message || "System telemetry could not be loaded.",
+        },
+      ],
+    };
+  }
+
+  if (currentRoute.view === "system") {
+    renderSystemView(currentSystemSnapshot);
+  }
+}
+
+function setSystemLoading() {
+  setSystemStatus("Waiting", "warning");
+  setSystemKpi("cpu", "--", "Awaiting telemetry");
+  setSystemKpi("temperature", "--", "Sensor unavailable");
+  setSystemKpi("memory", "--", "Used / total");
+  setSystemKpi("swap", "--", "Used / total");
+  setSystemKpi("load", "--", "1 / 5 / 15 min");
+  setSystemKpi("uptime", "--", "Host runtime");
+
+  if (systemSummaryMessage) {
+    systemSummaryMessage.textContent = "CPU, memory, swap, load, and thermal telemetry will appear after the first system snapshot.";
+  }
+  if (systemHistoryChip) {
+    systemHistoryChip.textContent = "--";
+  }
+  if (systemMemoryChip) {
+    systemMemoryChip.textContent = "--";
+  }
+  if (systemCpuChip) {
+    systemCpuChip.textContent = "--";
+  }
+
+  renderSystemHistoryCharts(null);
+  systemMemoryBars?.replaceChildren(makeDetailEmpty("System memory telemetry is waiting for the first snapshot."));
+  systemCpuDetailGrid?.replaceChildren(makeDetailEmpty("CPU telemetry is waiting for the first snapshot."));
+}
+
+function renderSystemView(snapshot) {
+  if (!snapshot) {
+    setSystemLoading();
+    return;
+  }
+
+  if (!snapshot.ok) {
+    const message = firstSystemErrorMessage(snapshot) || "System telemetry is unavailable.";
+    setSystemStatus("Unavailable", "error");
+    if (systemSummaryMessage) {
+      systemSummaryMessage.textContent = message;
+    }
+    systemMemoryBars?.replaceChildren(makeDetailEmpty(message));
+    systemCpuDetailGrid?.replaceChildren(makeDetailEmpty(message));
+    renderSystemHistoryCharts(snapshot);
+    return;
+  }
+
+  const temperature = snapshot.cpu?.temperature || {};
+  const hasTemperature = temperature.available && Number.isFinite(temperature.current_c);
+  const stale = systemFailureCount >= STALE_FAILURE_THRESHOLD;
+  const statusLevel = stale || !hasTemperature || snapshot.status === "partial" ? "warning" : "ok";
+  const statusLabel = stale ? "Stale" : snapshot.demo_mode ? "Demo" : snapshot.status === "partial" ? "Partial" : "Ready";
+  const cores = [snapshot.cpu?.physical_cores, snapshot.cpu?.logical_cores].filter(Number.isFinite);
+
+  setSystemStatus(statusLabel, statusLevel);
+  if (systemSummaryMessage) {
+    systemSummaryMessage.textContent = hasTemperature
+      ? `CPU temperature is coming from ${formatTemperatureSensor(temperature)}. System resources update with the dashboard polling cycle.`
+      : temperature.reason || "System resources are available, but CPU temperature is not exposed by this Linux environment.";
+  }
+  if (systemHistoryChip) {
+    systemHistoryChip.textContent = systemHistory.length === 1 ? "1 sample" : `${systemHistory.length} samples`;
+  }
+  if (systemMemoryChip) {
+    systemMemoryChip.textContent = formatTimestamp(snapshot.timestamp);
+  }
+  if (systemCpuChip) {
+    systemCpuChip.textContent = cores.length === 2 ? `${cores[0]}P / ${cores[1]}L` : "CPU";
+  }
+
+  updateSystemKpis(snapshot);
+  renderSystemHistoryCharts(snapshot);
+  renderSystemMemoryBars(snapshot);
+  renderSystemCpuDetails(snapshot);
+}
+
+function setSystemStatus(label, level) {
+  if (!systemStatusChip) {
+    return;
+  }
+
+  systemStatusChip.textContent = label;
+  systemStatusChip.dataset.status = level;
+}
+
+function updateSystemKpis(snapshot) {
+  const cpuPercent = normalizePercent(snapshot.cpu?.utilization_percent);
+  const temperature = snapshot.cpu?.temperature || {};
+  const memory = snapshot.memory || {};
+  const swap = snapshot.swap || {};
+  const loadAverage = snapshot.load_average || {};
+
+  setSystemKpi("cpu", formatPercent(cpuPercent), formatCoreSummary(snapshot.cpu));
+  setSystemKpi(
+    "temperature",
+    temperature.available ? formatTemperature(temperature.current_c) : "Unavailable",
+    temperature.available ? formatTemperatureSensor(temperature) : temperature.reason || "No CPU sensor",
+  );
+  setSystemKpi("memory", formatGibValue(memory.used_gib), `${formatGibValue(memory.total_gib)} total`);
+  setSystemKpi(
+    "swap",
+    formatGibValue(swap.used_gib),
+    Number.isFinite(swap.total_gib) && swap.total_gib > 0 ? `${formatGibValue(swap.total_gib)} total` : "No swap configured",
+  );
+  setSystemKpi(
+    "load",
+    formatLoadValue(loadAverage.one_min),
+    loadAverage.available
+      ? `${formatLoadValue(loadAverage.one_min)} / ${formatLoadValue(loadAverage.five_min)} / ${formatLoadValue(loadAverage.fifteen_min)}`
+      : "Unavailable",
+  );
+  setSystemKpi("uptime", formatDuration(snapshot.uptime?.seconds), "Since last boot");
+}
+
+function setSystemKpi(key, value, detail) {
+  const kpi = systemKpis[key];
+  if (!kpi?.value || !kpi?.detail) {
+    return;
+  }
+
+  kpi.value.textContent = value;
+  kpi.detail.textContent = detail;
+}
+
+function renderSystemHistoryCharts(snapshot) {
+  const memoryTotal = Math.max(1, Math.ceil(toFiniteMetric(snapshot?.memory?.total_gib) || 1));
+  const temp = snapshot?.cpu?.temperature || {};
+  const tempDangerStart = toFiniteMetric(temp.high_c) || 90;
+
+  renderDetailHistoryChart(systemHistoryCpu, systemHistory, "cpu", 100, "#24d7e8", {
+    axisTicks: [0, 50, 100],
+    axisSuffix: "%",
+    enableTooltip: true,
+    tooltipTitle: "CPU Utilization",
+    tooltipLabel: "CPU",
+    formatTooltipValue: formatPercent,
+  });
+  renderDetailHistoryChart(systemHistoryTemperature, systemHistory, "temperature", 110, "#3ee59a", {
+    axisTicks: [0, 55, tempDangerStart, 110],
+    axisSuffix: " C",
+    dangerZoneStart: tempDangerStart,
+    enableTooltip: true,
+    tooltipTitle: "CPU Temperature",
+    tooltipLabel: "CPU Temp",
+    formatTooltipValue: formatTemperature,
+  });
+  renderDetailHistoryChart(systemHistoryMemory, systemHistory, "memory_gib", memoryTotal, "#f3bb52", {
+    axisTicks: makeSystemMemoryAxisTicks(memoryTotal),
+    axisSuffix: " GiB",
+    enableTooltip: true,
+    tooltipTitle: "RAM Used",
+    tooltipLabel: "RAM",
+    formatTooltipValue: formatGibValue,
+  });
+}
+
+function renderSystemMemoryBars(snapshot) {
+  if (!systemMemoryBars) {
+    return;
+  }
+
+  const memory = snapshot.memory || {};
+  const swap = snapshot.swap || {};
+  systemMemoryBars.replaceChildren(
+    makeMemoryBar("RAM Used", formatGibValue(memory.used_gib), normalizePercent(memory.percent), "used"),
+    makeMemoryBar("RAM Available", formatGibValue(memory.available_gib), ramAvailablePercent(memory), "free"),
+    makeMemoryBar("Swap Used", formatGibValue(swap.used_gib), normalizePercent(swap.percent), "used"),
+    makeMemoryBar(
+      "Swap Free",
+      formatGibValue(swap.free_gib),
+      Number.isFinite(swap.free_gib) && Number.isFinite(swap.total_gib) && swap.total_gib > 0
+        ? normalizePercent((swap.free_gib / swap.total_gib) * 100)
+        : null,
+      "free",
+    ),
+  );
+}
+
+function renderSystemCpuDetails(snapshot) {
+  if (!systemCpuDetailGrid) {
+    return;
+  }
+
+  const cpu = snapshot.cpu || {};
+  const frequency = cpu.frequency_mhz || {};
+  const temperature = cpu.temperature || {};
+  const loadAverage = snapshot.load_average || {};
+  const perCoreValues = Array.isArray(cpu.per_core_percent)
+    ? cpu.per_core_percent.filter(Number.isFinite)
+    : [];
+  const perCoreRange = perCoreValues.length > 0
+    ? `${formatPercent(Math.min(...perCoreValues))} - ${formatPercent(Math.max(...perCoreValues))}`
+    : "Unavailable";
+
+  const metrics = [
+    ["Logical Cores", Number.isFinite(cpu.logical_cores) ? String(cpu.logical_cores) : "Unavailable", "Hardware threads visible to Linux"],
+    ["Physical Cores", Number.isFinite(cpu.physical_cores) ? String(cpu.physical_cores) : "Unavailable", "Physical core count from psutil"],
+    ["CPU Frequency", formatFrequency(frequency), "Current processor frequency"],
+    ["Per-Core Range", perCoreRange, "Lowest and highest core utilization"],
+    [
+      "Temperature Sensor",
+      temperature.available ? formatTemperatureSensor(temperature) : "Unavailable",
+      temperature.reason || "Selected CPU thermal source",
+    ],
+    ["Temp High", formatTemperature(temperature.high_c), "Sensor high threshold"],
+    ["Temp Critical", formatTemperature(temperature.critical_c), "Sensor critical threshold"],
+    [
+      "Load Average",
+      loadAverage.available
+        ? `${formatLoadValue(loadAverage.one_min)} / ${formatLoadValue(loadAverage.five_min)} / ${formatLoadValue(loadAverage.fifteen_min)}`
+        : "Unavailable",
+      "1, 5, and 15 minute load averages",
+    ],
+    ["Boot Time", snapshot.uptime?.boot_time ? formatTimestamp(snapshot.uptime.boot_time) : "Unavailable", "System boot timestamp"],
+    ["Snapshot", formatTimestamp(snapshot.timestamp), "Last system telemetry sample"],
+  ];
+
+  systemCpuDetailGrid.replaceChildren(...metrics.map(([label, value, detail]) => makeDetailMetricItem(label, value, detail)));
+}
+
 function makeDetailMetricItem(label, value, detail) {
   const item = document.createElement("article");
   item.className = "detail-metric";
@@ -1672,6 +1997,23 @@ function recordHistory(gpu) {
   histories.set(key, history);
 }
 
+function recordSystemHistory(snapshot) {
+  if (!snapshot?.ok) {
+    return;
+  }
+
+  systemHistory.push({
+    time: Date.now(),
+    cpu: normalizePercent(snapshot.cpu?.utilization_percent),
+    temperature: clampNumber(snapshot.cpu?.temperature?.current_c, 0, 110),
+    memory_gib: toFiniteMetric(snapshot.memory?.used_gib),
+  });
+
+  if (systemHistory.length > HISTORY_LIMIT) {
+    systemHistory.splice(0, systemHistory.length - HISTORY_LIMIT);
+  }
+}
+
 function renderChart(svg, history, metric, maxValue) {
   const width = 120;
   const height = 42;
@@ -1809,7 +2151,64 @@ function formatClock(date) {
 }
 
 function formatPercent(value) {
-  return value === null ? "Unavailable" : `${Math.round(value)}%`;
+  return value == null ? "Unavailable" : `${Math.round(value)}%`;
+}
+
+function formatCoreSummary(cpu) {
+  const physical = cpu?.physical_cores;
+  const logical = cpu?.logical_cores;
+  if (Number.isFinite(physical) && Number.isFinite(logical)) {
+    return `${physical} physical / ${logical} logical`;
+  }
+  if (Number.isFinite(logical)) {
+    return `${logical} logical cores`;
+  }
+  return "Core count unavailable";
+}
+
+function formatTemperatureSensor(temperature) {
+  const sensor = temperature?.sensor || "sensor";
+  const label = temperature?.label ? ` / ${temperature.label}` : "";
+  return `${sensor}${label}`;
+}
+
+function formatGibValue(value) {
+  return Number.isFinite(value) ? `${Number(value).toFixed(1)} GiB` : "Unavailable";
+}
+
+function formatLoadValue(value) {
+  return Number.isFinite(value) ? Number(value).toFixed(2) : "Unavailable";
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds)) {
+    return "Unavailable";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+function formatFrequency(frequency) {
+  if (!frequency?.available || !Number.isFinite(frequency.current_mhz)) {
+    return "Unavailable";
+  }
+
+  const current = `${Math.round(frequency.current_mhz)} MHz`;
+  if (Number.isFinite(frequency.max_mhz) && frequency.max_mhz > 0) {
+    return `${current} / ${Math.round(frequency.max_mhz)} MHz`;
+  }
+  return current;
 }
 
 function formatMemory(memory) {
@@ -1841,6 +2240,20 @@ function formatMib(value) {
   }
 
   return value >= 1024 ? `${(value / 1024).toFixed(1)} GiB` : `${Math.round(value)} MiB`;
+}
+
+function makeSystemMemoryAxisTicks(totalGib) {
+  const total = Math.max(1, Math.ceil(totalGib));
+  const halfway = Math.max(1, Math.round(total / 2));
+  return [0, halfway, total];
+}
+
+function ramAvailablePercent(memory) {
+  if (!Number.isFinite(memory?.available_gib) || !Number.isFinite(memory?.total_gib) || memory.total_gib <= 0) {
+    return null;
+  }
+
+  return normalizePercent((memory.available_gib / memory.total_gib) * 100);
 }
 
 function formatTemperature(value) {
@@ -1977,6 +2390,15 @@ function firstErrorMessage(snapshot) {
   }
 
   return [error.message, error.hint].filter(Boolean).join(" ");
+}
+
+function firstSystemErrorMessage(snapshot) {
+  const error = Array.isArray(snapshot?.errors) ? snapshot.errors[0] : null;
+  if (!error) {
+    return "";
+  }
+
+  return [error.message, error.hint, error.detail].filter(Boolean).join(" ");
 }
 
 document.addEventListener("visibilitychange", handleVisibilityChange);

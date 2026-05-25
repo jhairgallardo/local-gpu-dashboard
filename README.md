@@ -47,6 +47,8 @@ Capture these routes:
   rolling history charts.
 - Per-GPU detail views with full metrics, unavailable-field explanations, and
   process details when permissions allow them.
+- System resources view with CPU usage, CPU temperature when available, RAM,
+  swap, load average, frequency, uptime, and rolling history charts.
 - Diagnostics view for NVML, NVIDIA driver, `nvidia-smi`, and GPU visibility.
 - Dark and light themes with local browser persistence.
 - One-command local startup through `./run_dashboard.sh`.
@@ -149,10 +151,10 @@ Use it with a custom port if you already have the real dashboard running:
 DEMO_MODE=1 PORT=8090 ./run_dashboard.sh
 ```
 
-Demo mode serves realistic synthetic telemetry through the same `/api/snapshot`
-and `/api/diagnostics` contracts used by the real collector. Values change over
-time so polling, charts, overview tiles, per-GPU detail views, diagnostics, and
-process sections are visible.
+Demo mode serves realistic synthetic telemetry through the same `/api/snapshot`,
+`/api/system`, and `/api/diagnostics` contracts used by the real collectors.
+Values change over time so polling, charts, overview tiles, per-GPU detail
+views, system resources, diagnostics, and process sections are visible.
 
 The diagnostics view and diagnostics API clearly label demo mode. Synthetic
 values are for previewing the interface only; unset `DEMO_MODE` to query real
@@ -192,6 +194,19 @@ Open diagnostics when telemetry is incomplete or unavailable:
 http://127.0.0.1:8080/#diagnostics
 ```
 
+Open the System tab for whole-machine resource context:
+
+```text
+http://127.0.0.1:8080/#system
+```
+
+The System tab shows CPU utilization, CPU temperature when Linux exposes a CPU
+thermal sensor, RAM and swap usage in GiB, load average, CPU frequency, uptime,
+and short history charts. CPU temperature is optional because sensor names vary
+by hardware and kernel driver. When no CPU-specific sensor is visible, the
+dashboard keeps the rest of the System tab working and labels temperature as
+unavailable.
+
 ## Local API
 
 Health check:
@@ -210,6 +225,12 @@ NVIDIA runtime diagnostics:
 
 ```bash
 curl http://127.0.0.1:8080/api/diagnostics
+```
+
+System resource snapshot:
+
+```bash
+curl http://127.0.0.1:8080/api/system
 ```
 
 ## Privacy And Security
@@ -269,6 +290,15 @@ container runtime, WSL support, and MIG configuration.
 Unsupported metrics are shown as unavailable with a reason where NVML provides
 one.
 
+### CPU temperature is unavailable
+
+CPU temperature depends on Linux thermal sensors exposed through `hwmon`.
+Desktop AMD systems often expose `k10temp` values such as `Tdie`; Intel systems
+often expose `coretemp` package or core temperatures. Containers, WSL, virtual
+machines, laptops, and some kernels may hide these sensors. The dashboard ignores
+obvious non-CPU sensors such as network, Wi-Fi, NVMe, and GPU thermal readings
+for the CPU temperature plot.
+
 ### Refresh is stale or retrying
 
 The browser polls `/api/snapshot` once per second while visible and slows down
@@ -298,7 +328,7 @@ reporting guidance. See `CHANGELOG.md` for release notes.
 ```text
 local-gpu-dashboard/
 ├── .github/            # CI workflow and issue templates
-├── app/                 # FastAPI app, diagnostics, and NVML collector
+├── app/                 # FastAPI app, diagnostics, and telemetry collectors
 ├── docs/screenshots/    # Public-safe demo screenshots used by README
 ├── static/              # No-build frontend assets
 ├── tests/               # Mocked backend/API tests

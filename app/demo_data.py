@@ -14,6 +14,7 @@ BYTES_PER_MIB = 1024 * 1024
 DEMO_GPU_COUNT = 4
 DEMO_MEMORY_TOTAL_MIB = 24576.0
 DEMO_POWER_LIMIT_WATTS = 230.0
+BYTES_PER_GIB = 1024 ** 3
 
 
 def demo_mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -99,6 +100,93 @@ def get_demo_diagnostics(now: Optional[float] = None) -> Dict[str, Any]:
             "nvidia-smi is not required while demo mode is active.",
         ],
         "runtime_config": runtime_config.get_runtime_config(),
+        "errors": [],
+    }
+
+
+def get_demo_system_snapshot(now: Optional[float] = None) -> Dict[str, Any]:
+    """Return synthetic host telemetry for the System tab."""
+
+    current_time = time.time() if now is None else float(now)
+    cpu_utilization = round(
+        _clamp(
+            34
+            + 12 * math.sin(current_time * 0.045)
+            + 7 * math.sin(current_time * 0.17 + 1.3)
+            + _jitter(current_time, 31, 3.6),
+            8,
+            82,
+        ),
+        1,
+    )
+    cpu_temperature = round(
+        _clamp(
+            47
+            + cpu_utilization * 0.22
+            + 2.8 * math.sin(current_time * 0.025 + 0.6)
+            + _jitter(current_time, 43, 1.1),
+            35,
+            91,
+        ),
+        1,
+    )
+    memory_total_gib = 128.0
+    memory_used_gib = round(
+        _clamp(
+            48
+            + 6.5 * math.sin(current_time * 0.031 + 0.8)
+            + 3.2 * _pulse(_cycle(current_time, 90, 0.18), 0.35, 0.7),
+            24,
+            96,
+        ),
+        2,
+    )
+    swap_total_gib = 16.0
+    swap_used_gib = round(
+        _clamp(1.2 + 0.4 * math.sin(current_time * 0.019 + 1.7), 0, 4.5),
+        2,
+    )
+    load_one = round(_clamp(cpu_utilization / 10 + 1.2 * math.sin(current_time * 0.06), 0.4, 12), 2)
+
+    return {
+        "ok": True,
+        "status": "demo",
+        "mode": "demo",
+        "demo_mode": True,
+        "timestamp": _utc_timestamp(current_time),
+        "cpu": {
+            "utilization_percent": cpu_utilization,
+            "per_core_percent": _demo_core_utilization(current_time, cpu_utilization, 16),
+            "logical_cores": 16,
+            "physical_cores": 8,
+            "frequency_mhz": {
+                "available": True,
+                "current_mhz": round(3150 + cpu_utilization * 10 + _jitter(current_time, 52, 80), 1),
+                "min_mhz": 550.0,
+                "max_mhz": 5200.0,
+            },
+            "temperature": {
+                "available": True,
+                "current_c": cpu_temperature,
+                "high_c": 86.0,
+                "critical_c": 95.0,
+                "sensor": "demo_cpu",
+                "label": "Package",
+                "reason": None,
+            },
+        },
+        "memory": _system_memory_payload(memory_used_gib, memory_total_gib),
+        "swap": _system_memory_payload(swap_used_gib, swap_total_gib),
+        "load_average": {
+            "available": True,
+            "one_min": load_one,
+            "five_min": round(_clamp(load_one * 0.88, 0.3, 10), 2),
+            "fifteen_min": round(_clamp(load_one * 0.76, 0.2, 9), 2),
+        },
+        "uptime": {
+            "seconds": int(4 * 24 * 60 * 60 + _cycle(current_time, 86400, 0) * 86400),
+            "boot_time": _utc_timestamp(current_time - (4 * 24 * 60 * 60)),
+        },
         "errors": [],
     }
 
@@ -365,6 +453,31 @@ def _memory_payload(used_mib: float, total_mib: float) -> Dict[str, Any]:
         "free_mib": free_mib,
         "percent": round((used_mib / total_mib) * 100, 1) if total_mib else None,
     }
+
+
+def _system_memory_payload(used_gib: float, total_gib: float) -> Dict[str, Any]:
+    free_gib = round(max(0, total_gib - used_gib), 2)
+    available_gib = round(max(0, free_gib + total_gib * 0.08), 2)
+    return {
+        "used_bytes": int(used_gib * BYTES_PER_GIB),
+        "total_bytes": int(total_gib * BYTES_PER_GIB),
+        "free_bytes": int(free_gib * BYTES_PER_GIB),
+        "available_bytes": int(available_gib * BYTES_PER_GIB),
+        "used_gib": used_gib,
+        "total_gib": total_gib,
+        "free_gib": free_gib,
+        "available_gib": available_gib,
+        "percent": round((used_gib / total_gib) * 100, 1) if total_gib else None,
+    }
+
+
+def _demo_core_utilization(now: float, average: float, count: int) -> List[float]:
+    values = []
+    for index in range(count):
+        core_value = average + 11 * math.sin(now * (0.08 + index * 0.003) + index * 0.8)
+        core_value += _jitter(now, index + 60, 2.2)
+        values.append(round(_clamp(core_value, 2, 99), 1))
+    return values
 
 
 def _demo_utilization(index: int, now: float) -> float:

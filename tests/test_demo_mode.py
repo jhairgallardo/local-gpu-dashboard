@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app import demo_data, diagnostics, gpu_collector, main
+from app import demo_data, diagnostics, gpu_collector, main, system_collector
 
 
 class DemoModeTests(unittest.TestCase):
@@ -60,6 +60,24 @@ class DemoModeTests(unittest.TestCase):
             )
         )
 
+    def test_demo_system_snapshot_uses_system_contract(self):
+        first = demo_data.get_demo_system_snapshot(now=1_700_000_000.0)
+        second = demo_data.get_demo_system_snapshot(now=1_700_000_006.0)
+
+        self.assertTrue(first["ok"])
+        self.assertEqual(first["status"], "demo")
+        self.assertTrue(first["demo_mode"])
+        self.assertIn("cpu", first)
+        self.assertIn("memory", first)
+        self.assertIn("swap", first)
+        self.assertIn("load_average", first)
+        self.assertTrue(first["cpu"]["temperature"]["available"])
+        self.assertGreater(first["memory"]["total_gib"], first["memory"]["used_gib"])
+        self.assertNotEqual(
+            first["cpu"]["utilization_percent"],
+            second["cpu"]["utilization_percent"],
+        )
+
     def test_collector_uses_demo_mode_without_pynvml(self):
         with patch.dict(os.environ, {"DEMO_MODE": "1"}), patch.object(
             gpu_collector,
@@ -88,10 +106,21 @@ class DemoModeTests(unittest.TestCase):
         with patch.dict(os.environ, {"DEMO_MODE": "1"}):
             snapshot = main.api_snapshot()
             diagnostics_payload = main.api_diagnostics()
+            system_payload = main.api_system()
 
         self.assertEqual(snapshot["status"], "demo")
         self.assertEqual(diagnostics_payload["status"], "demo")
         self.assertTrue(diagnostics_payload["demo_mode"])
+        self.assertEqual(system_payload["status"], "demo")
+        self.assertTrue(system_payload["demo_mode"])
+
+    def test_system_collector_uses_demo_mode(self):
+        with patch.dict(os.environ, {"DEMO_MODE": "1"}):
+            system_payload = system_collector.get_system_snapshot()
+
+        self.assertTrue(system_payload["ok"])
+        self.assertEqual(system_payload["status"], "demo")
+        self.assertTrue(system_payload["demo_mode"])
 
 
 if __name__ == "__main__":

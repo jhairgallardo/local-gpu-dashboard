@@ -16,6 +16,7 @@ class ApiTests(unittest.TestCase):
         self.assertIn("/health", paths)
         self.assertIn("/api/snapshot", paths)
         self.assertIn("/api/diagnostics", paths)
+        self.assertIn("/api/system", paths)
         self.assertIn("/static", paths)
 
     def test_health_response(self):
@@ -124,6 +125,20 @@ class ApiTests(unittest.TestCase):
         self.assertFalse(response["ok"])
         self.assertEqual(response["status"], "pynvml_unavailable")
         self.assertEqual(response["errors"][0]["code"], "pynvml_unavailable")
+
+    def test_system_endpoint_uses_system_collector(self):
+        system_snapshot = {
+            "ok": True,
+            "status": "ok",
+            "timestamp": "2026-05-05T00:00:00Z",
+            "cpu": {"utilization_percent": 12.5},
+            "memory": {"used_gib": 8.0, "total_gib": 32.0},
+            "swap": {"used_gib": 0.0, "total_gib": 8.0},
+            "errors": [],
+        }
+
+        with patch.object(main, "get_system_snapshot", return_value=system_snapshot):
+            self.assertEqual(main.api_system(), system_snapshot)
 
 
 if __name__ == "__main__":

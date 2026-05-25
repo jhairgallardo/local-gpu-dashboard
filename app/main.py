@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app import APP_NAME, CURRENT_PHASE, SERVICE_NAME, __version__
 from app.diagnostics import get_diagnostics
 from app.gpu_collector import get_gpu_snapshot
+from app.system_collector import get_system_snapshot
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -43,3 +44,8 @@ def api_snapshot() -> Dict[str, object]:
 @app.get("/api/diagnostics")
 def api_diagnostics() -> Dict[str, object]:
     return get_diagnostics()
+
+
+@app.get("/api/system")
+def api_system() -> Dict[str, object]:
+    return get_system_snapshot()

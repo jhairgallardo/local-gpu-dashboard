@@ -1602,6 +1602,46 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.system-view {
+  --gpu-accent: var(--cyan);
+  --gpu-accent-rgb: var(--cyan-rgb);
+  display: grid;
+  gap: 18px;
+}
+
+.system-hero-panel,
+.system-history-panel,
+.system-resource-panel,
+.system-cpu-panel {
+  padding: 18px;
+}
+
+.system-hero-panel .gpu-name {
+  font-size: clamp(1.65rem, 3vw, 2.8rem);
+  line-height: 1.02;
+}
+
+.system-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  grid-template-areas:
+    "history resources"
+    "history cpu";
+  gap: 18px;
+}
+
+.system-history-panel {
+  grid-area: history;
+}
+
+.system-resource-panel {
+  grid-area: resources;
+}
+
+.system-cpu-panel {
+  grid-area: cpu;
+}
+
 @media (min-width: 1500px) {
   .app-frame {
     grid-template-columns: 240px minmax(0, 1fr);
@@ -1665,6 +1705,14 @@ h1 {
       "memory"
       "technical"
       "process";
+  }
+
+  .system-dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "history"
+      "resources"
+      "cpu";
   }
 
   .overview-hero {
@@ -1775,7 +1823,11 @@ h1 {
   .detail-metrics-panel,
   .detail-memory-panel,
   .detail-technical-panel,
-  .detail-process-panel {
+  .detail-process-panel,
+  .system-hero-panel,
+  .system-history-panel,
+  .system-resource-panel,
+  .system-cpu-panel {
     padding: 14px;
   }
 
@@ -1836,7 +1888,11 @@ h1 {
   .detail-metrics-panel,
   .detail-memory-panel,
   .detail-technical-panel,
-  .detail-process-panel {
+  .detail-process-panel,
+  .system-hero-panel,
+  .system-history-panel,
+  .system-resource-panel,
+  .system-cpu-panel {
     padding: 12px;
   }
 }
